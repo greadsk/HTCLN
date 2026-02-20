@@ -148,30 +148,26 @@ def compute_flops(model: nn.Module, example_input: Any) -> Tuple[Optional[int], 
         for m in model.modules()
     )
 
-    # thop
-    # NOTE:
-    # thop 对 nn.TransformerEncoder / nn.TransformerEncoderLayer 的统计不稳定，
-    # 会导致 TransformerRegressor 的 FLOPs 明显偏低；此处优先走 fvcore。
-    if not has_transformer_encoder:
+    if has_transformer_encoder:
         try:
-            from thop import profile as thop_profile  # type: ignore
-
-            # 为 MultiheadAttention 注册自定义计数钩子
-            custom_ops: Dict[type, Any] = {
-                nn.MultiheadAttention: _mha_flops_counter_hook,
-            }
+            from fvcore.nn import FlopCountAnalysis  # type: ignore
 
             model.eval()
-            with torch.no_grad():
-                macs, params = thop_profile(
-                    model,
-                    inputs=(example_input,),
-                    custom_ops=custom_ops,
-                    verbose=False,
-                )
-            return int(macs), "thop_macs"
+            flops = FlopCountAnalysis(model, (example_input,)).total()
+            return int(flops), "fvcore_flops"
         except Exception:
             pass
+
+    # thop
+    try:
+        from thop import profile as thop_profile  # type: ignore
+
+        model.eval()
+        with torch.no_grad():
+            macs, _ = thop_profile(model, inputs=(example_input,), verbose=False)
+        return int(macs), "thop_macs"
+    except Exception:
+        pass
 
     # fvcore
     try:
