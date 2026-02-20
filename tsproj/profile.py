@@ -164,7 +164,7 @@ def compute_flops(model: nn.Module, example_input: Any) -> Tuple[Optional[int], 
 
         model.eval()
         with torch.no_grad():
-            macs, params = thop_profile(model, inputs=(example_input,), verbose=False)
+            macs, _ = thop_profile(model, inputs=(example_input,), verbose=False)
         return int(macs), "thop_macs"
     except Exception:
         pass
