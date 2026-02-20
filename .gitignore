@@ -1,1 +1,4 @@
 tsproj/__pycache__
+tsproj/models/__pycache__
+**/__pycache__
+*.pyc

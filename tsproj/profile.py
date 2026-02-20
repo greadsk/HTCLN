@@ -23,7 +23,7 @@ def _manual_flops(model: nn.Module, example_input: Any) -> Optional[int]:
     """
     手动计算模型的近似 MACs（乘加运算次数）。
     支持以下层类型的精确计算：
-      - nn.Linear
+      - nn.Linear       每个 token 计算一次，乘以序列长度 T：2 * T * in * out
       - nn.MultiheadAttention
       - nn.Conv1d / nn.Conv2d
     其余层忽略（通常是激活函数、Dropout、LayerNorm 等，计算量很小）。
@@ -69,7 +69,7 @@ def _manual_flops(model: nn.Module, example_input: Any) -> Optional[int]:
             total_macs += in_proj_macs + score_macs + wsum_macs + out_proj_macs
 
         elif isinstance(module, nn.Linear) and not is_inside_mha:
-            total_macs += 2 * module.in_features * module.out_features
+            total_macs += 2 * module.in_features * module.out_features * T
 
         elif isinstance(module, nn.Conv1d) and not is_inside_mha:
             total_macs += 2 * module.in_channels * module.out_channels * module.kernel_size[0] * T
