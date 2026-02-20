@@ -143,26 +143,35 @@ def compute_flops(model: nn.Module, example_input: Any) -> Tuple[Optional[int], 
          防止 Transformer 模型的 FLOPs 被严重低估（thop 默认不支持 MHA）。
     """
 
+    has_transformer_encoder = any(
+        isinstance(m, (nn.TransformerEncoder, nn.TransformerEncoderLayer))
+        for m in model.modules()
+    )
+
     # thop
-    try:
-        from thop import profile as thop_profile  # type: ignore
+    # NOTE:
+    # thop 对 nn.TransformerEncoder / nn.TransformerEncoderLayer 的统计不稳定，
+    # 会导致 TransformerRegressor 的 FLOPs 明显偏低；此处优先走 fvcore。
+    if not has_transformer_encoder:
+        try:
+            from thop import profile as thop_profile  # type: ignore
 
-        # 为 MultiheadAttention 注册自定义计数钩子
-        custom_ops: Dict[type, Any] = {
-            nn.MultiheadAttention: _mha_flops_counter_hook,
-        }
+            # 为 MultiheadAttention 注册自定义计数钩子
+            custom_ops: Dict[type, Any] = {
+                nn.MultiheadAttention: _mha_flops_counter_hook,
+            }
 
-        model.eval()
-        with torch.no_grad():
-            macs, params = thop_profile(
-                model,
-                inputs=(example_input,),
-                custom_ops=custom_ops,
-                verbose=False,
-            )
-        return int(macs), "thop_macs"
-    except Exception:
-        pass
+            model.eval()
+            with torch.no_grad():
+                macs, params = thop_profile(
+                    model,
+                    inputs=(example_input,),
+                    custom_ops=custom_ops,
+                    verbose=False,
+                )
+            return int(macs), "thop_macs"
+        except Exception:
+            pass
 
     # fvcore
     try:
