@@ -124,8 +124,8 @@ def _mha_flops_counter_hook(module: nn.MultiheadAttention, input, output):
 
     total_macs = in_proj_macs + attn_score_macs + attn_out_macs + out_proj_macs
 
-    # thop 通过 module.__flops__ 累计 MACs（注意 thop 内部叫 flops，实际是 MACs）
-    module.__flops__ += total_macs
+    # thop 通过 module.total_ops 累计 MACs（register_buffer 注册的 DoubleTensor）
+    module.total_ops += torch.tensor([total_macs], dtype=torch.float64)
 
 
 def compute_flops(model: nn.Module, example_input: Any) -> Tuple[Optional[int], str]:
@@ -139,16 +139,33 @@ def compute_flops(model: nn.Module, example_input: Any) -> Tuple[Optional[int], 
 
     Note: Different libraries count FLOPs/MACs slightly differently.
     
-    Fix: 为 thop 注册 nn.MultiheadAttention 的自定义 FLOPs 计数钩子，
-         防止 Transformer 模型的 FLOPs 被严重低估（thop 默认不支持 MHA）。
+    Fix: 对于包含 nn.MultiheadAttention（含 TransformerEncoder/EncoderLayer）的模型，
+         使用 thop + 自定义钩子（_mha_flops_counter_hook）准确计算 MHA 的 FLOPs；
+         若 thop 不可用则回退到 fvcore。
     """
 
-    has_transformer_encoder = any(
-        isinstance(m, (nn.TransformerEncoder, nn.TransformerEncoderLayer))
+    has_mha = any(
+        isinstance(m, (nn.TransformerEncoder, nn.TransformerEncoderLayer, nn.MultiheadAttention))
         for m in model.modules()
     )
 
-    if has_transformer_encoder:
+    if has_mha:
+        # thop with custom MHA hook: accurately counts in_proj, attention scores, and out_proj
+        try:
+            from thop import profile as thop_profile  # type: ignore
+
+            model.eval()
+            with torch.no_grad():
+                macs, _ = thop_profile(
+                    model,
+                    inputs=(example_input,),
+                    verbose=False,
+                    custom_ops={nn.MultiheadAttention: _mha_flops_counter_hook},
+                )
+            return int(macs), "thop_macs"
+        except Exception:
+            pass
+
         try:
             from fvcore.nn import FlopCountAnalysis  # type: ignore
 
