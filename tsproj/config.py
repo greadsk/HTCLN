@@ -6,9 +6,9 @@ from typing import List, Optional
 @dataclass
 class ExperimentConfig:
     # data
-    seq_len: int = 25
+    seq_len: int = 36
     horizons: List[int] = field(default_factory=lambda: [8, 16, 32, 64])
-    batch_size: int = 32
+    batch_size: int = 64
     num_workers: int = 0
 
     # training
@@ -36,7 +36,7 @@ class Ablation2DConfig:
     - upsample_to: optional (H,W) to enforce unified resolution
     """
 
-    window_points: int = 25
+    window_points: int = 36
     time_stride: int = 1
     padding: int = 1
     upsample_to: Optional[int] = None  # if set, upsample padded square to (upsample_to, upsample_to)
